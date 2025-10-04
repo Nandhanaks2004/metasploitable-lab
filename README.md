@@ -1,98 +1,129 @@
-Metasploitable2 — Lab Notebook & Learning Outcomes
+Metasploitable2 — Offensive Security Lab Notes
+📖 Overview
 
-Broad topic: Practical offensive security lab using Metasploitable2 — a deliberately vulnerable VM used to learn recon, service enumeration, exploitation, and safe post‑exploit analysis.
+This repository documents a three-day hands-on lab with Metasploitable2 — a deliberately vulnerable Linux VM used for practicing penetration testing skills.
+The exercises followed a structured penetration-testing workflow:
 
-Overview
+Planning → Reconnaissance → Enumeration → Exploitation → Post-Exploitation → Documentation & Cleanup
 
-This repository documents a hands‑on three‑day lab exploring Metasploitable2. The goal was not to produce exploits for real systems, but to practice the full penetration‑testing workflow in a safe, isolated environment: planning → reconnaissance → enumeration → exploitation → post‑exploit enumeration → documentation and cleanup.
+⚠️ Disclaimer: This project was performed entirely in an isolated VirtualBox lab environment. Do not attempt these techniques on systems you do not own or have explicit permission to test.
 
-Lab goals / learning aims
+🎯 Lab Goals
 
-Build a repeatable, professional lab workflow for offensive security practice.
+Practice reconnaissance & service fingerprinting with Nmap.
 
-Learn and practice recon & service fingerprinting (Nmap outputs saved as .nmap / .xml / .gnmap).
+Learn service enumeration (FTP, SSH, Telnet, HTTP, SMB, PostgreSQL, etc.).
 
-Gain hands‑on experience exploiting real, known vulnerabilities in a controlled environment (Metasploit + PoC).
+Exploit known, intentional vulnerabilities with Metasploit and manual tools.
 
-Practice post‑exploit enumeration and evidence collection (whoami, id, uname, processes, network, SUID files, sudo rights).
+Perform post-exploitation checks (whoami, id, uname, sudo rights, SUID files).
 
-Understand different payload styles (reverse, bind, single‑command) and when to use each.
+Reinforce safe lab hygiene: snapshots, bridged/host-only networking, revert after exploitation.
 
-Develop safe lab hygiene (host‑only networking, snapshots, sanitization before committing logs).
+Focus deeply on FTP, SSH, Telnet, and HTTP to understand real-world risks.
 
-What I did (high level)
+🗂️ Lab Progress
+🔹 Day 1 — Lab Setup & First Exploitation
 
-Day 1 — Setup & initial recon
+Imported Metasploitable2 into VirtualBox, configured host-only networking for isolation.
 
-Downloaded/imported Metasploitable2 to VirtualBox, configured host‑only networking and snapshots.
+Verified default credentials (msfadmin/msfadmin).
 
-Performed initial Nmap reconnaissance and identified core attack surface (FTP, SSH, Telnet, HTTP/Tomcat, SMB, VNC, IRC, distcc, PostgreSQL).
+Performed initial Nmap scan to identify open services.
 
-Conducted first practical exploit: vsftpd 2.3.4 backdoor via Metasploit and obtained a shell.
+First exploitation: vsftpd 2.3.4 backdoor (FTP) → gained a shell.
 
-Day 2 — Targeted exploitation
+🔹 Day 2 — FTP & IRC Exploitation
 
-Built structured lab folders for scans/, exploits/, results/, screenshots/, notes/.
+Organized lab structure (scans/, exploits/, results/).
 
-Re‑ran baseline scans and exploited vsftpd again for practice.
+Re-scanned services for detailed version info.
 
-Exploited UnrealIRCd backdoor — tested and obtained both reverse and bind shells.
+FTP (vsftpd): Practiced enumeration (including anonymous login), then re-exploited vsftpd backdoor.
 
-Practiced consistent logging (msfconsole spools) and core post‑exploit enumeration.
+UnrealIRCd (IRC): Exploited backdoored version 3.2.8.1 → obtained both reverse and bind shells.
 
-Day 3 — Full service coverage
+Learned differences between reverse vs bind payloads.
 
-Completed exploitation and documentation for remaining high‑value services:
+Practiced post-exploitation: system info, process listing, privilege escalation checks.
 
-Tomcat (manager WAR deploy) — meterpreter via tomcat_mgr_deploy.
+🔹 Day 3 — Complete Service Exploitation (Focus: FTP, SSH, Telnet, HTTP)
 
-distcc — RCE PoC.
+Completed exploitation of remaining high-value services.
 
-SSH / Telnet / PostgreSQL / VNC — accessed via default/weak credentials.
+Extra focus given to FTP, SSH, Telnet, and HTTP (Apache/PHP):
 
-Samba/SMB — enumeration (enum4linux, smbclient, smbmap) and module use (usermap_script where applicable).
+FTP (21)
 
-Saved all scans, msf spools, post‑exploit outputs and screenshots (screenshots tracked or handled with Git LFS).
+Tested anonymous login → successful.
 
-Key commands / patterns used (examples)
+Exploited vsftpd 2.3.4 backdoor → gained remote shell.
 
-Baseline scan:
+SSH (22)
 
-sudo nmap -sS -sV -O -Pn <TARGET> -oA metasploitable_initial
+Banner confirmed OpenSSH running.
 
+Exploited using weak default credentials (msfadmin/msfadmin).
 
-Metasploit session logging:
+Telnet (23)
 
-msfconsole
-spool ~/labs/metasploitable/exploits/<service>-session.txt
-use <exploit/module>
-set RHOSTS <TARGET>
-set PAYLOAD <payload>
-exploit
-spool off
+Logged in with default creds.
 
+Verified that credentials travel in plaintext, captured via Wireshark.
 
-Post‑exploit enumeration (save outputs to results/):
+HTTP (80 — Apache 2.2.8 + PHP)
 
-whoami; id; uname -a; ps aux | head -n 30; ss -tulpen || netstat -tulpen; sudo -l
-find / -perm -4000 -type f | head -n 40
+Enumerated with curl and Gobuster → discovered /phpinfo.php and exposed credentials.
 
-Skills & takeaways
+Exploited PHP-CGI argument injection via Metasploit → gained Meterpreter session.
 
-Repeatable, auditable pen‑test workflow and good lab discipline.
+Other services covered: Tomcat (manager deploy), distcc RCE, Samba/SMB enum + usermap_script, VNC (weak password), PostgreSQL (weak creds).
 
-Practical experience with Metasploit modules and manual PoCs.
+🛠️ Key Tools & Commands
 
-Clear understanding of payload types (reverse vs bind) and practical trade‑offs.
+Nmap: sudo nmap -sS -sV -O -Pn <TARGET>
 
-Stronger Linux post‑exploit enumeration skills and artifact collection practices.
+FTP: ftp <TARGET> (tested anonymous login)
 
-Awareness of safe sharing practices: never commit unredacted credentials or private keys.
+SSH: sshpass -p 'msfadmin' ssh msfadmin@<TARGET>
 
-Safety & ethics
+Telnet: telnet <TARGET> (captured plaintext creds in Wireshark)
 
-Only run these exercises on systems you own or have explicit permission to test.
+HTTP: curl -I http://<TARGET>/, gobuster dir -u http://<TARGET>/
 
-Always isolate the lab (VirtualBox Host‑only or internal network).
+Metasploit: Used relevant modules for vsftpd, UnrealIRCd, Tomcat, PHP CGI, etc.
 
-Take snapshots before risky actions and revert after testing.
+📚 Skills & Takeaways
+
+Built a repeatable penetration-testing workflow.
+
+Gained hands-on practice with service enumeration & exploitation.
+
+Understood risks of:
+
+Anonymous FTP access.
+
+Weak/default SSH credentials.
+
+Telnet plaintext transmission.
+
+Web app misconfigurations (Apache/PHP).
+
+Learned systematic post-exploitation: checking users, processes, network, SUIDs, configs.
+
+Strengthened documentation discipline (all scans, exploits, results stored).
+
+Practiced safe lab hygiene: snapshots, revert after exploitation, bridged/host-only networks.
+
+✅ Conclusion
+
+Over three days, this lab provided end-to-end exposure to penetration testing in a safe environment.
+I now have practical experience in:
+
+Reconnaissance & service fingerprinting.
+
+Exploiting multiple real, known vulnerabilities.
+
+Post-exploitation enumeration and evidence collection.
+
+Documenting findings in a professional format suitable for GitHub and presentations.
